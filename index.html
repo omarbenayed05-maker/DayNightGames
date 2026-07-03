@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10111c" />
+  <title>Day & Night</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>🌒 Day & Night</h1>
+  <p class="subtitle">A social deduction party game</p>
+
+  <div class="card">
+    <button class="btn-primary" id="hostBtn">Host a Game</button>
+    <button class="btn-secondary" id="joinBtn">Join a Game</button>
+    <button class="btn-secondary" id="howToBtn">How to Play</button>
+    <button class="btn-secondary" id="installBtn" style="display:none;">📲 Install App</button>
+    <p id="iosInstallHint" style="display:none; text-align:center; color:var(--text-dim); font-size:0.8rem; margin-top:12px;">On iPhone/iPad: tap the Share icon in Safari, then "Add to Home Screen".</p>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    document.getElementById('hostBtn').onclick = () => {
+      window.location.href = 'pack.html';
+    };
+    document.getElementById('joinBtn').onclick = () => {
+      window.location.href = 'join.html';
+    };
+    document.getElementById('howToBtn').onclick = () => {
+      window.location.href = 'how-to-play.html';
+    };
+
+    // ---------- Install prompt ----------
+    const installBtn = document.getElementById('installBtn');
+    let deferredPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = 'block';
+    });
+
+    installBtn.onclick = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.style.display = 'none';
+    };
+
+    window.addEventListener('appinstalled', () => {
+      installBtn.style.display = 'none';
+    });
+
+    // Chrome/Edge on Android and desktop support the button above via
+    // beforeinstallprompt. iOS Safari has no such API — the only way to
+    // install there is the manual Share -> Add to Home Screen flow, so we
+    // just point people to it instead of pretending there's a button.
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isIos && !isStandalone) {
+      document.getElementById('iosInstallHint').style.display = 'block';
+    }
+  </script>
+</body>
+</html>

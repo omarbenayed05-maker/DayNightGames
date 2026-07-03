@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html     if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10111c" />
+  <title>Card Pack Creator</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .card-form input, .card-form textarea {
+      margin-top: 6px;
+    }
+    textarea {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 8px;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 70px;
+    }
+    .color-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .color-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 3px solid transparent;
+    }
+    .color-swatch.selected {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px var(--card-bg);
+    }
+    .image-preview {
+      width: 100%;
+      height: 140px;
+      border-radius: 12px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      margin-top: 8px;
+      overflow: hidden;
+      border: 1px dashed var(--border);
+    }
+    .image-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg-2);
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+    .toggle-row span {
+      font-size: 0.85rem;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      accent-color: var(--primary);
+    }
+    .pack-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .mini-card {
+      border-radius: 14px;
+      padding: 12px;
+      position: relative;
+      color: white;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      border: 3px solid var(--gold);
+    }
+    .mini-card .card-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .mini-card .card-desc {
+      font-size: 0.72rem;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+    .mini-card .tag-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .mini-tag {
+      font-size: 0.6rem;
+      background: rgba(0,0,0,0.5);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .remove-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0,0,0,0.4);
+      border: none;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      margin: 0;
+      padding: 0;
+    }
+    .empty-msg {
+      color: var(--text-dim);
+      text-align: center;
+      font-size: 0.85rem;
+      grid-column: span 2;
+      padding: 20px 0;
+    }
+    .pack-choice-list {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+    }
+    .pack-choice-list li {
+      background: var(--card-bg-2);
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .pack-choice-list .pack-info {
+      flex: 1;
+    }
+    .pack-choice-list .pack-info .pname {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .pack-choice-list .pack-info .pmeta {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .pack-choice-list button {
+      width: auto;
+      margin: 0;
+      padding: 8px 14px;
+      font-size: 0.8rem;
+    }
+    .pack-choice-list .del-btn {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+      padding: 8px 10px;
+    }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="index.html">&larr; Back</a>
+  <h1>Card Pack Creator</h1>
+  <p class="subtitle">Design the roles for your game</p>
+
+  <div class="card" id="packChooser" style="display:none;">
+    <label>Choose a pack to play with</label>
+    <ul class="pack-choice-list" id="packChoiceList"></ul>
+    <button class="btn-secondary" id="createNewBtn">+ Create a New Pack</button>
+  </div>
+
+  <div class="card card-form" id="creatorSection">
+    <label for="cardName">Card Name</label>
+    <input id="cardName" type="text" maxlength="24" placeholder="e.g. Wolf" />
+
+    <label for="cardDesc">Description / Power</label>
+    <textarea id="cardDesc" maxlength="200" placeholder="e.g. Wakes at night with the other wolves and chooses a victim."></textarea>
+
+    <label>Card Color</label>
+    <div class="color-row" id="colorRow"></div>
+
+    <label>Border Color</label>
+    <div class="color-row" id="borderColorRow"></div>
+
+    <label for="cardImage">Picture (optional)</label>
+    <input id="cardImage" type="file" accept="image/*" />
+    <div class="image-preview" id="imagePreview">No image</div>
+
+    <label for="cardQuantity">How many of this card in the game?</label>
+    <input id="cardQuantity" type="number" min="1" max="30" value="1" />
+
+    <label for="cardCategory">Team / Category</label>
+    <input id="cardCategory" type="text" maxlength="24" placeholder="e.g. Werewolves — leave blank for its own team" />
+    <p style="color:var(--text-dim); font-size:0.78rem; margin-top:4px;">Cards sharing a category win or lose together. Leave blank to make this card its own team.</p>
+
+    <div class="toggle-row">
+      <span>🌙 Wakes at night (host calls this role during the night)</span>
+      <input type="checkbox" id="wakesToggle" checked />
+    </div>
+
+    <button class="btn-primary" id="addCardBtn">Add Card</button>
+  </div>
+
+  <div class="card" id="packGridCard">
+    <label>Your Pack (<span id="cardCount">0</span> unique roles, <span id="totalCount">0</span> total cards)</label>
+    <div class="pack-grid" id="packGrid">
+      <p class="empty-msg">No cards yet — add your first one above.</p>
+    </div>
+  </div>
+
+  <div class="card" id="savePackCard">
+    <label for="packName">Pack Name</label>
+    <input id="packName" type="text" maxlength="30" placeholder="e.g. My Werewolf Pack" />
+    <div class="error" id="errorMsg"></div>
+    <button class="btn-primary" id="savePackBtn">Save Pack & Continue to Hosting</button>
+    <button class="btn-secondary" id="cancelNewBtn" style="display:none;">Cancel</button>
+  </div>
+
+  <script>
+    // ---------- Multi-pack storage ----------
+    // 'cardPacks' holds every pack the user has ever saved: [{ id, name, cards }]
+    // 'activeCardPack' holds the single pack host.html reads from when starting a game.
+    function loadSavedPacks() {
+      let packs = [];
+      try {
+        packs = JSON.parse(localStorage.getItem('cardPacks') || '[]');
+      } catch (e) {
+        packs = [];
+      }
+      // Migrate a legacy single activeCardPack into the list, if it's not already there
+      const legacy = localStorage.getItem('activeCardPack');
+      if (legacy && packs.length === 0) {
+        try {
+          const parsed = JSON.parse(legacy);
+          const migrated = { id: 'pack_' + Date.now(), name: parsed.name, cards: parsed.cards };
+          packs = [migrated];
+          localStorage.setItem('cardPacks', JSON.stringify(packs));
+        } catch (e) { /* ignore */ }
+      }
+      return packs;
+    }
+
+    function savePacksList(packs) {
+      localStorage.setItem('cardPacks', JSON.stringify(packs));
+    }
+
+    const packChooser = document.getElementById('packChooser');
+    const packChoiceList = document.getElementById('packChoiceList');
+    const creatorSection = document.getElementById('creatorSection');
+    const packGridCard = document.getElementById('packGridCard');
+    const savePackCard = document.getElementById('savePackCard');
+    const cancelNewBtn = document.getElementById('cancelNewBtn');
+
+    function showCreator(showCancel) {
+      packChooser.style.display = 'none';
+      creatorSection.style.display = 'block';
+      packGridCard.style.display = 'block';
+      savePackCard.style.display = 'block';
+      cancelNewBtn.style.display = showCancel ? 'block' : 'none';
+    }
+
+    function showChooser() {
+      const packs = loadSavedPacks();
+      creatorSection.style.display = 'none';
+      packGridCard.style.display = 'none';
+      savePackCard.style.display = 'none';
+      packChooser.style.display = 'block';
+
+      packChoiceList.innerHTML = '';
+      packs.forEach((p) => {
+        const li = document.createElement('li');
+        const total = p.cards.reduce((s, c) => s + (c.count || 1), 0);
+        li.innerHTML = `
+          <div class="pack-info">
+            <div class="pname">${p.name}</div>
+            <div class="pmeta">${p.cards.length} unique roles · ${total} total cards</div>
+          </div>
+        `;
+        const useBtn = document.createElement('button');
+        useBtn.className = 'btn-primary';
+        useBtn.textContent = 'Use This Pack';
+        useBtn.onclick = () => {
+          localStorage.setItem('activeCardPack', JSON.stringify({ name: p.name, cards: p.cards }));
+          window.location.href = 'host.html';
+        };
+        const delBtn = document.createElement('button');
+        delBtn.className = 'del-btn';
+        delBtn.textContent = '✕';
+        delBtn.onclick = () => {
+          if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return;
+          const remaining = loadSavedPacks().filter(x => x.id !== p.id);
+          savePacksList(remaining);
+          showChooser();
+        };
+        li.appendChild(useBtn);
+        li.appendChild(delBtn);
+        packChoiceList.appendChild(li);
+      });
+    }
+
+    const existingPacks = loadSavedPacks();
+    if (existingPacks.length > 0) {
+      showChooser();
+    } else {
+      showCreator(false);
+    }
+
+    document.getElementById('createNewBtn').onclick = () => showCreator(true);
+    cancelNewBtn.onclick = () => {
+      cards = [];
+      renderPack();
+      document.getElementById('packName').value = '';
+      document.getElementById('errorMsg').textContent = '';
+      showChooser();
+    };
+
+    const colors = ['#f0b429', '#2e86ff', '#7c5cff', '#e17055', '#00b894', '#d63031', '#636e72', '#e84393'];
+    let selectedColor = colors[0];
+    let selectedBorderColor = '#f0b429';
+    let pendingImage = '';
+    let cards = [];
+
+    function buildColorRow(containerId, initial, onPick) {
+      const row = document.getElementById(containerId);
+      colors.forEach(c => {
+        const dot = document.createElement('div');
+        dot.className = 'color-swatch' + (c === initial ? ' selected' : '');
+        dot.style.background = c;
+        dot.onclick = () => {
+          onPick(c);
+          row.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+          dot.classList.add('selected');
+        };
+        row.appendChild(dot);
+      });
+    }
+    buildColorRow('colorRow', selectedColor, (c) => selectedColor = c);
+    buildColorRow('borderColorRow', selectedBorderColor, (c) => selectedBorderColor = c);
+
+    const imageInput = document.getElementById('cardImage');
+    const imagePreview = document.getElementById('imagePreview');
+    imageInput.onchange = () => {
+      const file = imageInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        pendingImage = e.target.result;
+        imagePreview.innerHTML = `<img src="${pendingImage}" />`;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    function renderPack() {
+      const grid = document.getElementById('packGrid');
+      document.getElementById('cardCount').textContent = cards.length;
+      document.getElementById('totalCount').textContent = cards.reduce((s, c) => s + c.count, 0);
+      if (cards.length === 0) {
+        grid.innerHTML = '<p class="empty-msg">No cards yet — add your first one above.</p>';
+        return;
+      }
+      grid.innerHTML = '';
+      cards.forEach((c, i) => {
+        const el = document.createElement('div');
+        el.className = 'mini-card';
+        el.style.borderColor = c.borderColor;
+        el.style.background = c.image
+          ? `linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0.15)), url(${c.image}) center/cover`
+          : c.color;
+        el.innerHTML = `
+          <button class="remove-btn" data-i="${i}">✕</button>
+          <div class="tag-row">
+            ${c.wakesAtNight ? '<span class="mini-tag">🌙 Night</span>' : '<span class="mini-tag">☀️ Common</span>'}
+            <span class="mini-tag">×${c.count}</span>
+          </div>
+          <div class="card-name">${c.name}</div>
+          <div class="card-desc">${c.description || ''}</div>
+          <div class="card-desc" style="opacity:0.65; margin-top:4px;">🏴 ${c.category || c.name}</div>
+        `;
+        grid.appendChild(el);
+      });
+      document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.onclick = () => {
+          cards.splice(parseInt(btn.dataset.i), 1);
+          renderPack();
+        };
+      });
+    }
+
+    document.getElementById('addCardBtn').onclick = () => {
+      const name = document.getElementById('cardName').value.trim();
+      const description = document.getElementById('cardDesc').value.trim();
+      const wakesAtNight = document.getElementById('wakesToggle').checked;
+      const count = Math.max(1, parseInt(document.getElementById('cardQuantity').value) || 1);
+      const category = document.getElementById('cardCategory').value.trim() || name;
+
+      if (!name) {
+        alert('Give the card a name first.');
+        return;
+      }
+
+      cards.push({
+        name,
+        description,
+        color: selectedColor,
+        borderColor: selectedBorderColor,
+        image: pendingImage,
+        wakesAtNight,
+        count,
+        category
+      });
+
+      // Reset form
+      document.getElementById('cardName').value = '';
+      document.getElementById('cardDesc').value = '';
+      document.getElementById('wakesToggle').checked = true;
+      document.getElementById('cardQuantity').value = 1;
+      document.getElementById('cardCategory').value = '';
+      imageInput.value = '';
+      pendingImage = '';
+      imagePreview.innerHTML = 'No image';
+
+      renderPack();
+    };
+
+    document.getElementById('savePackBtn').onclick = () => {
+      const packName = document.getElementById('packName').value.trim();
+      const errorMsg = document.getElementById('errorMsg');
+
+      if (!packName) {
+        errorMsg.textContent = 'Give your pack a name.';
+        return;
+      }
+      if (cards.length < 2) {
+        errorMsg.textContent = 'Add at least 2 different card types before continuing.';
+        return;
+      }
+
+      const newPack = { id: 'pack_' + Date.now(), name: packName, cards };
+      const packs = loadSavedPacks();
+      packs.push(newPack);
+      savePacksList(packs);
+      localStorage.setItem('activeCardPack', JSON.stringify({ name: newPack.name, cards: newPack.cards }));
+
+      window.location.href = 'host.html';
+    };
+  </script>
+</body>
+</html>

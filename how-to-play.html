@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10111c" />
+  <title>How to Play</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), var(--blue), var(--primary));
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .step-text h3 {
+      margin: 0 0 4px;
+      font-size: 1rem;
+    }
+    .step-text p {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="index.html">&larr; Back</a>
+  <h1>How to Play</h1>
+  <p class="subtitle">A quick guide for players</p>
+
+  <div class="card">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        <h3>Join the room</h3>
+        <p>Get the 4-digit room code from your host, enter it along with your name, and wait in the lobby until the host starts.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        <h3>Check your secret role</h3>
+        <p>Once the game starts, you'll see a face-down card. Press and hold it to peek at your role — release to hide it again. Don't let others see your screen!</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        <h3>Daytime discussion</h3>
+        <p>During the day, talk with the group out loud — accuse, defend, and try to figure out who has which role. You can still hold your card to double check your role.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">
+        <h3>Vote</h3>
+        <p>When the host opens voting, tap the name of the player you want to eliminate. You can change your vote as many times as you like until the host confirms.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-text">
+        <h3>The reveal</h3>
+        <p>Whoever is eliminated has their role revealed to everyone. If you're eliminated, you can keep watching and listening — just no more talking or voting.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-text">
+        <h3>Nighttime</h3>
+        <p>Everyone closes their eyes. The host quietly calls on certain roles to secretly act. If your role is called, follow whatever action your card describes.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-text">
+        <h3>Repeat until someone wins</h3>
+        <p>The game cycles between night and day until one side achieves its win condition — your host will explain the specific roles and win conditions for this pack before you start.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;">💡 Tip: keep your phone's brightness down and your screen tilted away from others while peeking at your card!</p>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

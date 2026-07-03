@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10111c" />
+  <title>Hosting a Game</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .qty-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg-2);
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+    }
+    .qty-row span {
+      font-size: 0.9rem;
+    }
+    .qty-row input {
+      width: 60px;
+      margin: 0;
+      padding: 8px;
+      text-align: center;
+    }
+    .vote-log li {
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="index.html">&larr; Back</a>
+  <h1>You're the Host</h1>
+  <p class="subtitle">Share this code with your friends</p>
+
+  <div class="card">
+    <div class="room-code" id="roomCode">----</div>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;">Room Code</p>
+    <button class="btn-secondary" id="endGameBtn" style="margin-top:14px; color:var(--danger); border-color:var(--danger);">End Game</button>
+  </div>
+
+  <div class="card" id="lobbyCard">
+    <label>Players joined (<span id="playerCount">0</span>)</label>
+    <ul class="player-list" id="playerList"></ul>
+
+    <label>Card quantities (adjust to match your players)</label>
+    <div id="qtyEditor"></div>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;" id="deckTotalText"></p>
+
+    <button class="btn-primary" id="startBtn" disabled>Start Game</button>
+  </div>
+
+  <div class="card" id="narratorPanel" style="display:none;">
+    <label id="nightOrderLabel">Night Order — tap Next to call the next role</label>
+    <div class="room-code" id="currentRoleName" style="font-size:1.6rem;">-</div>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;" id="roleProgress"></p>
+    <button class="btn-secondary" id="nextRoleBtn">Next Role ▶</button>
+  </div>
+
+  <div class="card" id="playerControlPanel" style="display:none;">
+    <label>Players — tap a name to kill / revive</label>
+    <ul class="player-list" id="narratorPlayerList"></ul>
+    <button class="btn-primary" id="endNightBtn">End Night → Start Day</button>
+  </div>
+
+  <div class="card" id="dayControlPanel" style="display:none;">
+    <p style="text-align:center; color:var(--text-dim);">Daytime — let players discuss.</p>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;" id="voteGateMsg"></p>
+    <button class="btn-primary" id="startNightBtn">Start First Night 🌙</button>
+    <button class="btn-primary" id="openVoteBtn">Open Voting</button>
+  </div>
+
+  <div class="card" id="votingPanel" style="display:none;">
+    <label>Live Votes — tap Eliminate on the player to remove</label>
+    <ul class="player-list" id="votingList"></ul>
+    <label>Who voted for who</label>
+    <ul class="player-list vote-log" id="voteLog"></ul>
+  </div>
+
+  <div class="card" id="revealPanel" style="display:none;">
+    <p style="text-align:center; color:var(--text-dim);" id="revealText"></p>
+    <div class="flip-card" style="margin:16px auto;">
+      <div class="flip-inner flipped">
+        <div class="flip-front" id="revealFront">
+          <div class="flip-front-overlay">
+            <div class="card-role-name" id="revealName"></div>
+            <div class="card-role-desc" id="revealDesc"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary" id="continueBtn">Continue to Next Night</button>
+  </div>
+
+  <div class="card" id="winnerPanel" style="display:none;">
+    <label>Declare a Winner — that team wins, everyone else loses</label>
+    <ul class="player-list" id="categoryList"></ul>
+  </div>
+
+  <div class="card" id="gameOverPanel" style="display:none;">
+    <p style="text-align:center; font-size:1.4rem;" id="gameOverTitle"></p>
+    <ul class="player-list" id="gameOverList"></ul>
+    <button class="btn-secondary" id="backHomeBtn">Back to Home</button>
+  </div>
+
+  <script type="module">
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    import { db, ref, set, get, update, remove, onValue, serverTimestamp } from './firebase-config.js';
+
+    const rawPack = localStorage.getItem('activeCardPack');
+    if (!rawPack) {
+      window.location.href = 'pack.html';
+    }
+    const pack = JSON.parse(rawPack);
+
+    // Host can tweak quantities live before starting, so we clone into a mutable copy
+    let livePack = JSON.parse(JSON.stringify(pack.cards));
+
+    // Disable everything until a room actually exists in Firebase
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('endGameBtn').disabled = true;
+
+    async function generateUniqueCode() {
+      // 4-digit codes only give us 9000 possibilities, so double-check the
+      // one we picked isn't already taken by another live room.
+      let code;
+      let taken = true;
+      while (taken) {
+        code = Math.floor(1000 + Math.random() * 9000).toString();
+        const snap = await get(ref(db, `rooms/${code}`));
+        taken = snap.exists();
+      }
+      return code;
+    }
+
+    let roomCode = null;
+    let roomRef = null;
+    let playersRef = null;
+    let votesRef = null;
+
+    let currentPlayers = {};
+    let currentVotes = {};
+    let phase = 'lobby';
+    let nightsCompleted = 0;
+    let uniqueRoles = [];
+    let roleIndex = 0;
+
+    function setTheme(light) {
+      document.body.classList.toggle('theme-day', light);
+    }
+
+    function totalDeckSize() {
+      return livePack.reduce((s, c) => s + (c.count || 1), 0);
+    }
+
+    // Only cards marked "wakesAtNight" get called during the night
+    function uniqueNightRoles() {
+      return [...new Set(livePack.filter(c => c.wakesAtNight).map(c => c.name))];
+    }
+
+    async function initRoom() {
+      roomCode = await generateUniqueCode();
+      document.getElementById('roomCode').textContent = roomCode;
+
+      roomRef = ref(db, `rooms/${roomCode}`);
+      playersRef = ref(db, `rooms/${roomCode}/players`);
+      votesRef = ref(db, `rooms/${roomCode}/votes`);
+
+      await set(roomRef, {
+        status: 'lobby',
+        createdAt: serverTimestamp(),
+        players: {},
+        pack: livePack,
+        nightsCompleted: 0
+      });
+
+      // Note: no onDisconnect(roomRef).remove() here on purpose — mobile
+      // browsers drop connections constantly (screen lock, backgrounding,
+      // flaky wifi). Auto-deleting the room on any host hiccup would kill
+      // the game for everyone. The host ends the game explicitly instead.
+
+      onValue(playersRef, (snapshot) => {
+        currentPlayers = snapshot.val() || {};
+        renderCurrentPanel();
+      });
+
+      onValue(votesRef, (snapshot) => {
+        currentVotes = snapshot.val() || {};
+        if (phase === 'voting') renderVotingPanel();
+      });
+
+      document.getElementById('endGameBtn').disabled = false;
+      renderLobby();
+    }
+    initRoom();
+
+    document.getElementById('endGameBtn').onclick = async () => {
+      if (!roomRef) return;
+      if (!confirm('End this game for everyone? This cannot be undone.')) return;
+      await remove(roomRef);
+      window.location.href = 'index.html';
+    };
+
+    function renderCurrentPanel() {
+      if (phase === 'lobby') renderLobby();
+      else if (phase === 'night') renderNarratorPlayerList();
+      else if (phase === 'voting') renderVotingPanel();
+    }
+
+    // ---------- Lobby ----------
+    function renderQtyEditor() {
+      const container = document.getElementById('qtyEditor');
+      container.innerHTML = '';
+      livePack.forEach((c, i) => {
+        const row = document.createElement('div');
+        row.className = 'qty-row';
+        row.innerHTML = `<span>${c.name}</span>`;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.max = '30';
+        input.value = c.count || 1;
+        input.onchange = () => {
+          livePack[i].count = Math.max(0, parseInt(input.value) || 0);
+          renderLobby();
+        };
+        row.appendChild(input);
+        container.appendChild(row);
+      });
+    }
+    renderQtyEditor();
+
+    function renderLobby() {
+      const entries = Object.entries(currentPlayers);
+      document.getElementById('playerCount').textContent = entries.length;
+      const listEl = document.getElementById('playerList');
+      listEl.innerHTML = '';
+      entries.forEach(([pid, p]) => {
+        const li = document.createElement('li');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = p.name;
+        li.appendChild(nameSpan);
+
+        const kickBtn = document.createElement('button');
+        kickBtn.textContent = 'Kick';
+        kickBtn.className = 'btn-secondary';
+        kickBtn.style.width = 'auto';
+        kickBtn.style.margin = '0';
+        kickBtn.style.padding = '6px 12px';
+        kickBtn.style.fontSize = '0.75rem';
+        kickBtn.style.color = 'var(--danger)';
+        kickBtn.onclick = () => remove(ref(db, `rooms/${roomCode}/players/${pid}`));
+        li.appendChild(kickBtn);
+
+        listEl.appendChild(li);
+      });
+
+      const total = totalDeckSize();
+      document.getElementById('deckTotalText').textContent = `Deck total: ${total} cards — Players joined: ${entries.length}`;
+
+      const startBtn = document.getElementById('startBtn');
+      startBtn.disabled = entries.length !== total || total === 0;
+      startBtn.textContent = `Start Game (${entries.length} players / ${total} cards)`;
+    }
+
+    document.getElementById('startBtn').onclick = async () => {
+      const playerIds = Object.keys(currentPlayers);
+      const total = totalDeckSize();
+
+      if (playerIds.length !== total) {
+        alert(`Your deck has ${total} total cards but ${playerIds.length} players joined. Adjust quantities above to match.`);
+        return;
+      }
+
+      // Expand each card definition into its set quantity
+      const deck = livePack.flatMap(c => Array(c.count || 1).fill(c));
+      const shuffled = [...deck].sort(() => Math.random() - 0.5);
+
+      const updates = {};
+      playerIds.forEach((pid, i) => {
+        updates[`rooms/${roomCode}/players/${pid}/card`] = shuffled[i];
+        updates[`rooms/${roomCode}/players/${pid}/alive`] = true;
+        updates[`rooms/${roomCode}/players/${pid}/justDied`] = false;
+      });
+      updates[`rooms/${roomCode}/status`] = 'day';
+      updates[`rooms/${roomCode}/pack`] = livePack;
+      await update(ref(db), updates);
+
+      uniqueRoles = uniqueNightRoles();
+
+      document.getElementById('lobbyCard').style.display = 'none';
+      phase = 'day';
+      setTheme(true);
+      showDayPanel();
+      document.getElementById('winnerPanel').style.display = 'block';
+      renderWinnerPanel();
+    };
+
+    // ---------- Win / Loss ----------
+    function renderWinnerPanel() {
+      const listEl = document.getElementById('categoryList');
+      listEl.innerHTML = '';
+      const categories = [...new Set(livePack.map(c => c.category || c.name))];
+      categories.forEach(cat => {
+        const li = document.createElement('li');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = cat;
+        li.appendChild(nameSpan);
+
+        const btn = document.createElement('button');
+        btn.textContent = '🏆 Declare Winner';
+        btn.className = 'btn-primary';
+        btn.style.width = 'auto';
+        btn.style.margin = '0';
+        btn.style.padding = '8px 14px';
+        btn.style.fontSize = '0.8rem';
+        btn.onclick = () => declareWinner(cat);
+        li.appendChild(btn);
+
+        listEl.appendChild(li);
+      });
+    }
+
+    async function declareWinner(category) {
+      if (!confirm(`Declare "${category}" the winner? This ends the game for everyone.`)) return;
+      await update(roomRef, {
+        status: 'gameover',
+        winningCategory: category,
+        endedAt: serverTimestamp()
+      });
+      showGameOver(category);
+    }
+
+    function showGameOver(category) {
+      phase = 'gameover';
+      ['lobbyCard', 'narratorPanel', 'playerControlPanel', 'dayControlPanel', 'votingPanel', 'revealPanel', 'winnerPanel']
+        .forEach(id => document.getElementById(id).style.display = 'none');
+
+      document.getElementById('gameOverPanel').style.display = 'block';
+      document.getElementById('gameOverTitle').textContent = `🏆 ${category} Wins!`;
+
+      const listEl = document.getElementById('gameOverList');
+      listEl.innerHTML = '';
+      Object.values(currentPlayers).forEach(p => {
+        const cat = p.card ? (p.card.category || p.card.name) : '?';
+        const won = cat === category;
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${p.name} — ${p.card ? p.card.name : '?'}</span>
+          <span class="host-tag" style="color:${won ? 'var(--gold)' : 'var(--text-dim)'}">${won ? '🏆 WIN' : 'LOSE'}</span>`;
+        listEl.appendChild(li);
+      });
+    }
+
+    document.getElementById('backHomeBtn').onclick = () => {
+      window.location.href = 'index.html';
+    };
+
+    // ---------- Day ----------
+    function showDayPanel() {
+      document.getElementById('dayControlPanel').style.display = 'block';
+      const voteGateMsg = document.getElementById('voteGateMsg');
+      const openVoteBtn = document.getElementById('openVoteBtn');
+      const startNightBtn = document.getElementById('startNightBtn');
+      if (nightsCompleted === 0) {
+        voteGateMsg.style.display = 'block';
+        voteGateMsg.textContent = 'Let everyone get settled, then start the first night when you\'re ready.';
+        openVoteBtn.style.display = 'none';
+        startNightBtn.style.display = 'block';
+      } else {
+        voteGateMsg.style.display = 'none';
+        openVoteBtn.style.display = 'block';
+        startNightBtn.style.display = 'none';
+      }
+    }
+
+    document.getElementById('startNightBtn').onclick = async () => {
+      await update(roomRef, { status: 'night' });
+      document.getElementById('dayControlPanel').style.display = 'none';
+      document.getElementById('playerControlPanel').style.display = 'block';
+      goToNight();
+    };
+
+    // ---------- Night ----------
+    function goToNight() {
+      phase = 'night';
+      roleIndex = 0;
+      setTheme(false);
+      document.getElementById('revealPanel').style.display = 'none';
+      document.getElementById('playerControlPanel').style.display = 'block';
+
+      if (uniqueRoles.length === 0) {
+        document.getElementById('narratorPanel').style.display = 'none';
+      } else {
+        document.getElementById('narratorPanel').style.display = 'block';
+        renderRole();
+      }
+      renderNarratorPlayerList();
+    }
+
+    function renderRole() {
+      document.getElementById('currentRoleName').textContent = uniqueRoles[roleIndex];
+      document.getElementById('roleProgress').textContent = `Role ${roleIndex + 1} of ${uniqueRoles.length}`;
+      const nextBtn = document.getElementById('nextRoleBtn');
+      nextBtn.disabled = roleIndex >= uniqueRoles.length - 1;
+      nextBtn.textContent = roleIndex >= uniqueRoles.length - 1 ? 'All roles called' : 'Next Role ▶';
+    }
+
+    document.getElementById('nextRoleBtn').onclick = () => {
+      roleIndex = Math.min(uniqueRoles.length - 1, roleIndex + 1);
+      renderRole();
+    };
+
+    function renderNarratorPlayerList() {
+      const listEl = document.getElementById('narratorPlayerList');
+      listEl.innerHTML = '';
+      Object.entries(currentPlayers).forEach(([pid, p]) => {
+        const li = document.createElement('li');
+        li.style.cursor = 'pointer';
+        li.innerHTML = `<span>${p.name} ${p.card ? '(' + p.card.name + ')' : ''}</span>
+          <span class="host-tag">${p.alive === false ? '💀 DEAD' : 'ALIVE'}</span>`;
+        li.onclick = () => {
+          const willBeAlive = p.alive === false ? true : false;
+          const updateObj = { alive: willBeAlive };
+          updateObj.justDied = willBeAlive ? false : true;
+          update(ref(db, `rooms/${roomCode}/players/${pid}`), updateObj);
+        };
+        listEl.appendChild(li);
+      });
+    }
+
+    document.getElementById('endNightBtn').onclick = async () => {
+      nightsCompleted += 1;
+      await update(roomRef, { status: 'day', nightsCompleted });
+      phase = 'day';
+      setTheme(true);
+      document.getElementById('narratorPanel').style.display = 'none';
+      document.getElementById('playerControlPanel').style.display = 'none';
+      showDayPanel();
+    };
+
+    // ---------- Voting ----------
+    document.getElementById('openVoteBtn').onclick = async () => {
+      await update(roomRef, { status: 'voting', votes: {} });
+      currentVotes = {};
+      phase = 'voting';
+      setTheme(true);
+      document.getElementById('dayControlPanel').style.display = 'none';
+      document.getElementById('votingPanel').style.display = 'block';
+      renderVotingPanel();
+    };
+
+    function renderVotingPanel() {
+      const listEl = document.getElementById('votingList');
+      listEl.innerHTML = '';
+      const tally = {};
+      Object.values(currentVotes).forEach(targetId => {
+        tally[targetId] = (tally[targetId] || 0) + 1;
+      });
+
+      Object.entries(currentPlayers).forEach(([pid, p]) => {
+        if (p.alive === false) return;
+        const votes = tally[pid] || 0;
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${p.name} — ${votes} vote${votes === 1 ? '' : 's'}</span>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Eliminate';
+        btn.className = 'btn-secondary';
+        btn.style.width = 'auto';
+        btn.style.margin = '0';
+        btn.style.padding = '6px 12px';
+        btn.style.fontSize = '0.8rem';
+        btn.onclick = () => eliminatePlayer(pid);
+        li.appendChild(btn);
+        listEl.appendChild(li);
+      });
+
+      renderVoteLog(document.getElementById('voteLog'), currentPlayers, currentVotes);
+    }
+
+    function renderVoteLog(listEl, players, votes) {
+      listEl.innerHTML = '';
+      Object.entries(players).forEach(([pid, p]) => {
+        if (p.alive === false) return;
+        const li = document.createElement('li');
+        const targetId = votes[pid];
+        const targetName = targetId ? (players[targetId] ? players[targetId].name : '?') : null;
+        li.textContent = targetName ? `${p.name} → ${targetName}` : `${p.name} — still deciding`;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function eliminatePlayer(pid) {
+      const p = currentPlayers[pid];
+      await update(ref(db, `rooms/${roomCode}/players/${pid}`), { alive: false });
+      await update(roomRef, {
+        status: 'reveal',
+        lastEliminated: { name: p.name, card: p.card }
+      });
+      phase = 'reveal';
+      setTheme(false);
+      document.getElementById('votingPanel').style.display = 'none';
+      showReveal(p.name, p.card);
+    }
+
+    function showReveal(name, card) {
+      document.getElementById('revealPanel').style.display = 'block';
+      document.getElementById('revealText').textContent = `${name} was eliminated. They were:`;
+      document.getElementById('revealName').textContent = card.name;
+      document.getElementById('revealDesc').textContent = card.description || '';
+      const front = document.getElementById('revealFront');
+      front.style.borderColor = card.borderColor || '';
+      if (card.image) {
+        front.style.backgroundImage = `url(${card.image})`;
+      } else {
+        front.style.backgroundImage = 'none';
+        front.style.background = card.color || '#7c5cff';
+      }
+    }
+
+    document.getElementById('continueBtn').onclick = async () => {
+      await update(roomRef, { status: 'night', votes: {} });
+      currentVotes = {};
+      document.getElementById('playerControlPanel').style.display = 'block';
+      goToNight();
+    };
+  </script>
+</body>
+</html>

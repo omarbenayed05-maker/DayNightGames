@@ -1,0 +1,436 @@
+:root {
+  --bg: #10111c;
+  --bg-2: #171829;
+  --text: #f2f2f7;
+  --text-dim: #a3a3b8;
+  --card-bg: #1b1c2b;
+  --card-bg-2: #262840;
+  --primary: #7c5cff;
+  --primary-dim: #5a3fd6;
+  --gold: #f0b429;
+  --blue: #2e86ff;
+  --border: #35375a;
+  --danger: #ff6b6b;
+}
+
+body.theme-day {
+  --bg: #eaf4ff;
+  --bg-2: #d9ecff;
+  --text: #211f38;
+  --text-dim: #5b6785;
+  --card-bg: #ffffff;
+  --card-bg-2: #eef6ff;
+  --primary: #6c4ee0;
+  --primary-dim: #5638b8;
+  --gold: #c8880d;
+  --blue: #2f80ed;
+  --border: #cfe3f7;
+  --danger: #d64545;
+}
+
+body.theme-death {
+  --bg: #200608;
+  --text: #ffe1e1;
+  --text-dim: #e08a8a;
+  --card-bg: #3a0f13;
+  --card-bg-2: #4a1418;
+  --primary: #e6394a;
+  --primary-dim: #a8202e;
+  --gold: #ff5b6a;
+  --border: #6b1e26;
+}
+
+.death-screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 40%, #4a1418, #150406);
+  z-index: 999;
+  text-align: center;
+  padding: 24px;
+}
+
+.death-screen .skull {
+  font-size: 5rem;
+  animation: pulse-death 1.4s ease-in-out infinite;
+}
+
+.death-screen h1 {
+  color: #ff5b6a;
+  -webkit-text-fill-color: #ff5b6a;
+  background: none;
+  font-size: 2.4rem;
+  letter-spacing: 2px;
+  margin: 16px 0 8px;
+}
+
+.death-screen p {
+  color: #f2c9c9;
+  margin-bottom: 24px;
+}
+
+.death-screen button {
+  max-width: 240px;
+}
+
+@keyframes pulse-death {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.85; }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  position: relative;
+  background: linear-gradient(180deg, var(--bg), var(--bg-2));
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 60px;
+  overflow-x: hidden;
+  transition: background-color 0.8s ease, color 0.6s ease;
+}
+
+/* ---------- Ambient background: drifting stars (dark) / sky & clouds (light) ---------- */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -10% -10%;
+  z-index: -2;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+
+/* Starfield layers — visible in dark / death themes */
+body::before {
+  background-image:
+    radial-gradient(1.6px 1.6px at 8% 12%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 22% 68%, #ffffff, transparent 60%),
+    radial-gradient(2px 2px at 35% 22%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 48% 82%, #ffffff, transparent 60%),
+    radial-gradient(1.8px 1.8px at 62% 38%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 74% 12%, #ffffff, transparent 60%),
+    radial-gradient(2px 2px at 85% 58%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 92% 88%, #ffffff, transparent 60%),
+    radial-gradient(1.6px 1.6px at 15% 92%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 58% 6%, #ffffff, transparent 60%);
+  background-repeat: repeat;
+  background-size: 420px 420px;
+  opacity: 0.55;
+  animation: drift-stars 90s linear infinite;
+}
+
+body::after {
+  background-image:
+    radial-gradient(1px 1px at 10% 30%, rgba(240,180,41,0.9), transparent 60%),
+    radial-gradient(1.2px 1.2px at 30% 80%, rgba(240,180,41,0.9), transparent 60%),
+    radial-gradient(1px 1px at 55% 15%, #ffffff, transparent 60%),
+    radial-gradient(1.4px 1.4px at 70% 65%, #ffffff, transparent 60%),
+    radial-gradient(1px 1px at 88% 35%, rgba(46,134,255,0.9), transparent 60%),
+    radial-gradient(1.2px 1.2px at 95% 78%, #ffffff, transparent 60%);
+  background-repeat: repeat;
+  background-size: 300px 300px;
+  opacity: 0.5;
+  animation: drift-stars 140s linear infinite reverse;
+}
+
+@keyframes drift-stars {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-420px, -420px, 0); }
+}
+
+/* Daytime sky — soft blue gradient with slow-drifting clouds */
+body.theme-day::before {
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) 6%, transparent 9%),
+    radial-gradient(circle at 22% 22%, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.8) 8%, transparent 11%),
+    radial-gradient(circle at 70% 12%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.85) 5%, transparent 8%),
+    radial-gradient(circle at 78% 15%, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.75) 7%, transparent 10%),
+    radial-gradient(circle at 45% 55%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.6) 5%, transparent 8%),
+    linear-gradient(180deg, #cfe8ff 0%, #eaf4ff 60%, #f7fbff 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  opacity: 1;
+  animation: drift-clouds 60s linear infinite;
+}
+
+body.theme-day::after {
+  background-image:
+    radial-gradient(circle at 10% 70%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.55) 6%, transparent 9%),
+    radial-gradient(circle at 60% 80%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.5) 7%, transparent 10%),
+    radial-gradient(circle at 88% 60%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.55) 5%, transparent 8%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  opacity: 0.9;
+  animation: drift-clouds 90s linear infinite reverse;
+}
+
+@keyframes drift-clouds {
+  from { transform: translateX(-6%); }
+  to { transform: translateX(6%); }
+}
+
+body.theme-death::before,
+body.theme-death::after {
+  opacity: 0;
+}
+
+/* Smooth slide transition between pages (Chrome/Edge; falls back safely elsewhere) */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 0.28s ease-in both slide-out-left;
+}
+
+::view-transition-new(root) {
+  animation: 0.28s ease-in both slide-in-right;
+}
+
+@keyframes slide-out-left {
+  to { transform: translateX(-25%); opacity: 0; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(25%); opacity: 0; }
+}
+
+h1 {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+  text-align: center;
+  background: linear-gradient(90deg, var(--gold), var(--blue), var(--primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  text-align: center;
+  transition: color 0.6s ease;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  margin-bottom: 16px;
+  transition: background-color 0.6s ease, border-color 0.6s ease;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease, background-color 0.4s ease;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:active {
+  transform: scale(0.96);
+  box-shadow: 0 0 0 5px rgba(240, 180, 41, 0.22);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--gold), var(--blue), var(--primary));
+  color: white;
+  box-shadow: 0 4px 14px rgba(46, 134, 255, 0.35);
+}
+
+.btn-secondary {
+  background: var(--card-bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+  margin-top: 8px;
+  transition: background-color 0.6s ease, border-color 0.3s ease;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.2);
+}
+
+label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  display: block;
+  margin-top: 16px;
+  transition: color 0.6s ease;
+}
+
+.room-code {
+  font-size: 2.4rem;
+  letter-spacing: 6px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--gold);
+  margin: 12px 0 4px;
+}
+
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.player-list li {
+  background: var(--card-bg-2);
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background-color 0.4s ease, transform 0.15s ease;
+}
+
+.player-list li:active {
+  transform: scale(0.98);
+}
+
+.host-tag {
+  font-size: 0.7rem;
+  color: var(--gold);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-top: 8px;
+  min-height: 1.2em;
+}
+
+.back-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+  display: inline-block;
+}
+
+.flip-card {
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 3 / 4.2;
+  margin: 24px auto;
+  perspective: 1200px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.35s;
+  transform-style: preserve-3d;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-back, .flip-front {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+}
+
+.flip-back {
+  background: linear-gradient(135deg, var(--card-bg-2), var(--card-bg));
+  font-size: 3rem;
+  border: 2px solid var(--border);
+}
+
+.flip-front {
+  transform: rotateY(180deg);
+  background-size: cover;
+  background-position: center;
+  color: white;
+  border: 4px solid var(--gold);
+}
+
+.flip-front-overlay {
+  background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.3));
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.flip-front-overlay .card-role-name {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.flip-front-overlay .card-role-desc {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+.hold-hint {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10111c" />
+  <title>Join a Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <a class="back-link" href="index.html">&larr; Back</a>
+  <h1>Join a Game</h1>
+  <p class="subtitle">Enter the room code from your host</p>
+
+  <div class="card" id="joinForm">
+    <label for="codeInput">Room Code</label>
+    <input id="codeInput" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
+
+    <label for="nameInput">Your Name</label>
+    <input id="nameInput" type="text" maxlength="20" placeholder="e.g. Omar" />
+
+    <div class="error" id="errorMsg"></div>
+    <button class="btn-primary" id="joinBtn">Join</button>
+  </div>
+
+  <div class="card" id="waitingRoom" style="display:none;">
+    <p style="text-align:center; color:var(--text-dim);">Waiting for host to start...</p>
+    <label>Players in room (<span id="playerCount">0</span>)</label>
+    <ul class="player-list" id="playerList"></ul>
+  </div>
+
+  <div id="cardScreen" style="display:none; width:100%; max-width:400px;">
+    <p class="hold-hint">Press and hold your card to view your role. Release to hide it again.</p>
+    <div class="flip-card" id="flipCard">
+      <div class="flip-inner" id="flipInner">
+        <div class="flip-back">🌒</div>
+        <div class="flip-front" id="flipFront">
+          <div class="flip-front-overlay">
+            <div class="card-role-name" id="roleName"></div>
+            <div class="card-role-desc" id="roleDesc"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="dayScreen" style="display:none;">
+    <p style="text-align:center; font-size:1.3rem;">☀️ It's daytime</p>
+    <p style="text-align:center; color:var(--text-dim);" id="aliveStatus">Discuss with the group.</p>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;">You can still hold your card above to check your role.</p>
+  </div>
+
+  <div class="card" id="votingScreen" style="display:none;">
+    <p style="text-align:center; font-size:1.2rem;">🗳️ Time to vote</p>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.85rem;">Tap a name to vote. You can change your vote anytime.</p>
+    <ul class="player-list" id="voteList"></ul>
+    <label>Who voted for who</label>
+    <ul class="player-list" id="voteLog"></ul>
+  </div>
+
+  <div class="card" id="revealScreen" style="display:none;">
+    <p style="text-align:center; color:var(--text-dim);" id="revealText"></p>
+    <div class="flip-card" style="margin:16px auto;">
+      <div class="flip-inner flipped">
+        <div class="flip-front" id="revealFront">
+          <div class="flip-front-overlay">
+            <div class="card-role-name" id="revealName"></div>
+            <div class="card-role-desc" id="revealDesc"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="gameOverScreen" style="display:none;">
+    <p style="text-align:center; font-size:1.6rem;" id="goTitle"></p>
+    <p style="text-align:center;" id="goSubtitle"></p>
+  </div>
+
+  <div class="death-screen" id="deathScreen">
+    <div class="skull">💀</div>
+    <h1>YOU DIED</h1>
+    <p id="deathReason">The wolves got you during the night.</p>
+    <button class="btn-primary" id="continueDeathBtn">Continue</button>
+  </div>
+
+  <script type="module">
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    import { db, ref, set, get, onValue, remove, update, onDisconnect } from './firebase-config.js';
+
+    const codeInput = document.getElementById('codeInput');
+    const nameInput = document.getElementById('nameInput');
+    const errorMsg = document.getElementById('errorMsg');
+    const joinBtn = document.getElementById('joinBtn');
+    const joinForm = document.getElementById('joinForm');
+    const waitingRoom = document.getElementById('waitingRoom');
+
+    const SESSION_KEY = 'dngSession';
+
+    const screens = ['waitingRoom', 'dayScreen', 'votingScreen', 'revealScreen', 'gameOverScreen'];
+    function hideAllPhaseScreens() {
+      screens.forEach(id => document.getElementById(id).style.display = 'none');
+    }
+    function setTheme(light) {
+      document.body.classList.toggle('theme-day', light);
+    }
+
+    function saveSession(code, playerId) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ code, playerId }));
+    }
+    function clearSession() {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+
+    // Called when the room disappears (host ended it) or we get removed
+    // from it (kicked, or a stale session from a game that's long over).
+    function returnToJoinForm(message) {
+      clearSession();
+      document.body.classList.remove('theme-day', 'theme-death');
+      document.getElementById('deathScreen').style.display = 'none';
+      document.getElementById('cardScreen').style.display = 'none';
+      hideAllPhaseScreens();
+      waitingRoom.style.display = 'none';
+      joinForm.style.display = 'block';
+      errorMsg.textContent = message || '';
+    }
+
+    joinBtn.onclick = async () => {
+      const code = codeInput.value.trim();
+      const name = nameInput.value.trim();
+      errorMsg.textContent = '';
+
+      if (code.length !== 4) {
+        errorMsg.textContent = 'Enter the 4-digit room code.';
+        return;
+      }
+      if (!name) {
+        errorMsg.textContent = 'Enter your name.';
+        return;
+      }
+
+      const roomRef = ref(db, `rooms/${code}`);
+      const snapshot = await get(roomRef);
+
+      if (!snapshot.exists()) {
+        errorMsg.textContent = 'Room not found. Check the code and try again.';
+        return;
+      }
+
+      const roomData = snapshot.val();
+      const existingPlayers = roomData.players || {};
+      const nameTaken = Object.values(existingPlayers).some(
+        p => p.name && p.name.trim().toLowerCase() === name.toLowerCase()
+      );
+      if (nameTaken) {
+        errorMsg.textContent = 'That name is already taken in this room — pick another.';
+        return;
+      }
+      if (roomData.status && roomData.status !== 'lobby') {
+        errorMsg.textContent = 'This game has already started. Ask your host for a new room.';
+        return;
+      }
+
+      const playerId = 'p_' + Math.random().toString(36).slice(2, 10);
+      const playerRef = ref(db, `rooms/${code}/players/${playerId}`);
+
+      await set(playerRef, { name });
+      saveSession(code, playerId);
+
+      joinForm.style.display = 'none';
+      enterGame(code, playerId);
+    };
+
+    // Shared setup used both for a fresh join and for resuming an existing
+    // session after a page refresh / reconnect.
+    function enterGame(code, playerId) {
+      const roomRef = ref(db, `rooms/${code}`);
+      const playerRef = ref(db, `rooms/${code}/players/${playerId}`);
+      const playersRef = ref(db, `rooms/${code}/players`);
+      const listEl = document.getElementById('playerList');
+      const countEl = document.getElementById('playerCount');
+
+      let currentPlayers = {};
+      let sawSelf = false;
+      let lobbyDisconnect = null;
+
+      // Detect the room being deleted entirely (host pressed End Game)
+      onValue(roomRef, (snap) => {
+        if (!snap.exists()) {
+          returnToJoinForm('This game has ended.');
+        }
+      });
+
+      onValue(playersRef, (snap) => {
+        currentPlayers = snap.val() || {};
+
+        // If we were in this player list before and now we're not, we were
+        // either kicked by the host or our session is stale — bail out
+        // cleanly instead of showing a broken UI.
+        if (sawSelf && !currentPlayers[playerId]) {
+          returnToJoinForm('You were removed from this game.');
+          return;
+        }
+        if (currentPlayers[playerId]) sawSelf = true;
+
+        const names = Object.values(currentPlayers).map(p => p.name);
+        countEl.textContent = names.length;
+        listEl.innerHTML = '';
+        names.forEach(n => {
+          const li = document.createElement('li');
+          li.textContent = n;
+          listEl.appendChild(li);
+        });
+
+        if (document.getElementById('votingScreen').style.display === 'block') {
+          renderVoteList(code, playerId, currentPlayers);
+        }
+      });
+
+      const statusRef = ref(db, `rooms/${code}/status`);
+      onValue(statusRef, (snap) => {
+        const status = snap.val();
+
+        // Only auto-remove an abandoned connection while still in the
+        // lobby. Once the game is underway, a dropped connection (screen
+        // lock, spotty wifi) should NOT wipe the player out.
+        if (status === 'lobby') {
+          if (!lobbyDisconnect) {
+            lobbyDisconnect = onDisconnect(playerRef);
+            lobbyDisconnect.remove();
+          }
+        } else if (lobbyDisconnect) {
+          lobbyDisconnect.cancel();
+          lobbyDisconnect = null;
+        }
+
+        if (status === 'lobby') {
+          hideAllPhaseScreens();
+          document.getElementById('cardScreen').style.display = 'none';
+          waitingRoom.style.display = 'block';
+        } else if (status === 'night') {
+          hideAllPhaseScreens();
+          setTheme(false);
+          document.getElementById('cardScreen').style.display = 'block';
+          wireCard(code, playerId);
+        } else if (status === 'day') {
+          hideAllPhaseScreens();
+          checkJustDied(code, playerId, () => {
+            setTheme(true);
+            document.getElementById('cardScreen').style.display = 'block';
+            document.getElementById('dayScreen').style.display = 'block';
+            wireCard(code, playerId);
+            watchAliveStatus(code, playerId);
+          });
+        } else if (status === 'voting') {
+          hideAllPhaseScreens();
+          setTheme(true);
+          document.getElementById('votingScreen').style.display = 'block';
+          renderVoteList(code, playerId, currentPlayers);
+          watchAliveStatus(code, playerId);
+        } else if (status === 'reveal') {
+          hideAllPhaseScreens();
+          setTheme(false);
+          document.getElementById('revealScreen').style.display = 'block';
+          showReveal(code);
+        } else if (status === 'gameover') {
+          hideAllPhaseScreens();
+          document.getElementById('cardScreen').style.display = 'none';
+          showGameOverForPlayer(code, playerId);
+        }
+      });
+    }
+
+    // On load, try to resume a session that survived a refresh/reconnect.
+    (async function tryResume() {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      let session;
+      try {
+        session = JSON.parse(raw);
+      } catch (e) {
+        clearSession();
+        return;
+      }
+      const { code, playerId } = session || {};
+      if (!code || !playerId) {
+        clearSession();
+        return;
+      }
+      const playerSnap = await get(ref(db, `rooms/${code}/players/${playerId}`));
+      if (!playerSnap.exists()) {
+        clearSession();
+        return;
+      }
+      joinForm.style.display = 'none';
+      enterGame(code, playerId);
+    })();
+
+    async function checkJustDied(code, playerId, proceed) {
+      const jdRef = ref(db, `rooms/${code}/players/${playerId}/justDied`);
+      const snap = await get(jdRef);
+      if (snap.val() === true) {
+        showDeathScreen(code, playerId, proceed);
+      } else {
+        proceed();
+      }
+    }
+
+    function showDeathScreen(code, playerId, proceed) {
+      document.body.classList.add('theme-death');
+      document.getElementById('deathScreen').style.display = 'flex';
+      document.getElementById('continueDeathBtn').onclick = async () => {
+        await update(ref(db, `rooms/${code}/players/${playerId}`), { justDied: false });
+        document.body.classList.remove('theme-death');
+        document.getElementById('deathScreen').style.display = 'none';
+        proceed();
+      };
+    }
+
+    function watchAliveStatus(code, playerId) {
+      const aliveRef = ref(db, `rooms/${code}/players/${playerId}/alive`);
+      onValue(aliveRef, (snap) => {
+        const alive = snap.val();
+        const statusEl = document.getElementById('aliveStatus');
+        if (statusEl) {
+          statusEl.textContent = alive === false ? 'You have been eliminated. You can still watch and listen.' : 'Discuss with the group.';
+        }
+      });
+    }
+
+    function renderVoteList(code, playerId, players) {
+      const listEl = document.getElementById('voteList');
+      const logEl = document.getElementById('voteLog');
+      const allVotesRef = ref(db, `rooms/${code}/votes`);
+
+      onValue(allVotesRef, (snap) => {
+        const allVotes = snap.val() || {};
+        const myVote = allVotes[playerId];
+        listEl.innerHTML = '';
+
+        const me = players[playerId];
+        if (me && me.alive === false) {
+          listEl.innerHTML = '<li>You are eliminated and cannot vote.</li>';
+        } else {
+          Object.entries(players).forEach(([pid, p]) => {
+            if (p.alive === false) return;
+            const li = document.createElement('li');
+            li.style.cursor = 'pointer';
+            li.textContent = p.name;
+            if (pid === myVote) {
+              li.style.background = 'var(--primary)';
+              li.style.color = 'white';
+            }
+            li.onclick = () => {
+              set(ref(db, `rooms/${code}/votes/${playerId}`), pid);
+            };
+            listEl.appendChild(li);
+          });
+        }
+
+        // Show everyone who voted for who, live
+        logEl.innerHTML = '';
+        Object.entries(players).forEach(([pid, p]) => {
+          if (p.alive === false) return;
+          const targetId = allVotes[pid];
+          const targetName = targetId ? (players[targetId] ? players[targetId].name : '?') : null;
+          const li = document.createElement('li');
+          li.textContent = targetName ? `${p.name} → ${targetName}` : `${p.name} — still deciding`;
+          logEl.appendChild(li);
+        });
+      });
+    }
+
+    async function showGameOverForPlayer(code, playerId) {
+      const roomSnap = await get(ref(db, `rooms/${code}`));
+      const room = roomSnap.val() || {};
+      const winningCategory = room.winningCategory;
+      const me = (room.players || {})[playerId];
+      const myCard = me ? me.card : null;
+      const myCategory = myCard ? (myCard.category || myCard.name) : null;
+      const won = myCategory && winningCategory && myCategory === winningCategory;
+
+      document.body.classList.remove('theme-day', 'theme-death');
+      const screen = document.getElementById('gameOverScreen');
+      screen.style.display = 'block';
+      screen.style.background = won
+        ? 'linear-gradient(135deg, var(--gold), var(--blue), var(--primary))'
+        : 'linear-gradient(135deg, #3a0f13, #200608)';
+      screen.style.color = won ? '#1b1c2b' : '#ffe1e1';
+
+      document.getElementById('goTitle').textContent = won ? '🏆 Victory!' : '💀 Defeat';
+      document.getElementById('goSubtitle').textContent =
+        `${winningCategory || 'A team'} wins the game. You were ${myCard ? myCard.name : 'in the game'}.`;
+    }
+
+    function showReveal(code) {
+      const lastRef = ref(db, `rooms/${code}/lastEliminated`);
+      onValue(lastRef, (snap) => {
+        const info = snap.val();
+        if (!info) return;
+        document.getElementById('revealText').textContent = `${info.name} was eliminated. They were:`;
+        document.getElementById('revealName').textContent = info.card.name;
+        document.getElementById('revealDesc').textContent = info.card.description || '';
+        const front = document.getElementById('revealFront');
+        front.style.borderColor = info.card.borderColor || '';
+        if (info.card.image) {
+          front.style.backgroundImage = `url(${info.card.image})`;
+        } else {
+          front.style.backgroundImage = 'none';
+          front.style.background = info.card.color || '#7c5cff';
+        }
+      }, { onlyOnce: true });
+    }
+
+    let cardWired = false;
+    function wireCard(code, playerId) {
+      const cardRef = ref(db, `rooms/${code}/players/${playerId}/card`);
+      onValue(cardRef, (snap) => {
+        const card = snap.val();
+        if (!card) return;
+
+        document.getElementById('roleName').textContent = card.name;
+        document.getElementById('roleDesc').textContent = card.description || '';
+
+        const front = document.getElementById('flipFront');
+        front.style.borderColor = card.borderColor || '';
+        if (card.image) {
+          front.style.backgroundImage = `url(${card.image})`;
+        } else {
+          front.style.backgroundImage = 'none';
+          front.style.background = card.color || '#7c5cff';
+        }
+      }, { onlyOnce: true });
+
+      if (cardWired) return;
+      cardWired = true;
+
+      const flipInner = document.getElementById('flipInner');
+      const flip = () => flipInner.classList.add('flipped');
+      const unflip = () => flipInner.classList.remove('flipped');
+
+      flipInner.addEventListener('pointerdown', flip);
+      flipInner.addEventListener('pointerup', unflip);
+      flipInner.addEventListener('pointerleave', unflip);
+      flipInner.addEventListener('pointercancel', unflip);
+    }
+  </script>
+</body>
+</html>
